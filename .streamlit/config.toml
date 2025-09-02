@@ -1,0 +1,9 @@
+[theme]
+# Backgrounds
+primaryColor = "#FF80AB"        # cheerful pink
+backgroundColor = "#FFF8E1"     # soft pastel yellow
+secondaryBackgroundColor = "#E1F5FE"  # baby blue highlight
+
+# Text
+textColor = "#4E342E"           # warm chocolate brown for readability
+font = "Comic Sans MS"          # lighthearted, rounded font

@@ -1,6 +1,3 @@
-def main():
-    print("Hello from python-template!")
+from src.app.run_app import run_app
 
-
-if __name__ == "__main__":
-    main()
+run_app()
