@@ -10,6 +10,8 @@ def run_app():
     """
     Run the Streamlit app
     """
+    verify_user()
+
     st.set_page_config(page_title="Archie App", layout="wide")
 
     # Set up matplotlib font
@@ -43,3 +45,17 @@ def run_app():
         display_sleeping()
     else:
         display_drinking()
+
+
+def verify_user():
+    """
+    Verify a user of the app using the query params
+    """
+    if (
+        "password" in st.query_params
+        and st.query_params["password"] == st.secrets["password"]
+    ):
+        return
+
+    st.error("Unauthorised user!")
+    st.stop()
