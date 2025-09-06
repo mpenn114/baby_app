@@ -4,6 +4,7 @@ from google.cloud import bigquery
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from src.cfg.colour_config import ColourConfig
 
 COLOURS = ColourConfig()
@@ -30,7 +31,7 @@ def display_bowels():
                 unsafe_allow_html=True,
             )
             nappy_date = st.date_input("Nappy Date", value=datetime.today())
-            nappy_time = st.time_input("Nappy Time", value=datetime.now())
+            nappy_time = st.time_input("Nappy Time")
             nappy_changer = st.selectbox(
                 "Nappy Changer",
                 list(
@@ -125,6 +126,13 @@ def display_bowels():
         plt.ylim([0, nappies_per_day["total"].max() + 1])
         plt.ylabel("Nappies", fontsize=18, color=COLOURS.BROWN_HEX)
         plt.xlabel("Date", fontsize=18, color=COLOURS.BROWN_HEX)
+        # Ensure that there are whole days shown on the x axis
+        locator = mdates.AutoDateLocator(minticks=3, maxticks=10, interval_multiples=True)
+        ax.xaxis.set_major_locator(locator)
+        # Format to show only dates (no times)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m-%y"))
+
+        plt.xticks(fontsize=14)
         plt.title("Nappies Over Time", fontsize=24, color=COLOURS.BROWN_HEX)
         plt.legend(fontsize=14)
         st.pyplot(fig)
