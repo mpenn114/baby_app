@@ -84,3 +84,4 @@ def get_font():
     # Add a TTF file to matplotlib’s font manager
     font_path = "src/cfg/fonts/playpen_sans.ttf"
     font_manager.fontManager.addfont(font_path)
+    plt.rcParams["font.family"] = "Playpen Sans"
