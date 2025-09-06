@@ -15,7 +15,9 @@ def display_bowels():
     """
     Display the bowels page
     """
-    st.markdown("<h1 style='text-align: center;'>Bowels 💩</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<h1 style='text-align: center;'>Bowels 💩</h1>", unsafe_allow_html=True
+    )  # noqa: E501
 
     # Retrieve the nappies data
     if "nappy_cache" not in st.session_state:
@@ -79,7 +81,7 @@ def display_bowels():
             selected_nappy = st.selectbox("Select Nappy", nappy_date_time)
             delete_form_submit = st.form_submit_button(
                 "Delete Nappy",
-                help="Note that pressing this button will not remove your memory of this nappy",
+                help="Note that pressing this button will not remove your memory of this nappy", # noqa: E501
             )
     if delete_form_submit:
         nappies_data = nappies_data[nappy_date_time != selected_nappy]
@@ -127,7 +129,9 @@ def display_bowels():
         plt.ylabel("Nappies", fontsize=18, color=COLOURS.BROWN_HEX)
         plt.xlabel("Date", fontsize=18, color=COLOURS.BROWN_HEX)
         # Ensure that there are whole days shown on the x axis
-        locator = mdates.AutoDateLocator(minticks=3, maxticks=10, interval_multiples=True)
+        locator = mdates.AutoDateLocator(
+            minticks=3, maxticks=10, interval_multiples=True
+        )
         ax.xaxis.set_major_locator(locator)
         # Format to show only dates (no times)
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m-%y"))

@@ -54,9 +54,9 @@ def verify_user():
     Verify a user of the app using the query params
     """
     # Allow for local running
-    if st.secrets.get('environment',None) == 'dev':
+    if st.secrets.get("environment", None) == "dev":
         return
-    
+
     if (
         "password" in st.query_params
         and st.query_params["password"] == st.secrets["password"]
@@ -66,11 +66,13 @@ def verify_user():
     st.error("Unauthorised user!")
     st.stop()
 
+
 def get_font():
     """
     Get the font
     """
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Playpen+Sans&display=swap');
 
@@ -79,8 +81,8 @@ def get_font():
     }
     </style>
     """,
-    unsafe_allow_html=True,
-)
+        unsafe_allow_html=True,
+    )
     # Add a TTF file to matplotlib’s font manager
     font_path = "src/cfg/fonts/playpen_sans.ttf"
     font_manager.fontManager.addfont(font_path)
