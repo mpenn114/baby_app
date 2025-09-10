@@ -77,7 +77,15 @@ def display_drinking():
         st.pyplot(plot_drink_duration_per_day(drinking_data))
         st.pyplot(plot_duration_by_side(drinking_data))
 
-
+    st.markdown("_____________________")
+    st.markdown(
+        "<h3 style='text-align: center;'>All Drinking Data</h3>", unsafe_allow_html=True
+    )
+    st.markdown(
+        "<p style='text-align: center;'>I promise we'll feed him real food one day...</p>",
+        unsafe_allow_html=True,
+    )
+    display_drinking_data(drinking_data)
 
 
 @st.cache_data(show_spinner="Not that kind of drinking...")
@@ -102,7 +110,7 @@ def plot_drinks_per_day(df: pd.DataFrame):
 
     fig, ax = plt.subplots(figsize=(8, 5))
     total_counts.plot(ax=ax, marker="o", color=COLOURS.PINK_HEX, label="All drinks")
-    bottle_counts.plot(ax=ax, marker="o", color=COLOURS.YELLOW_HEX, label="Bottle-fed drinks")
+    bottle_counts.plot(ax=ax, marker="o", color='k', label="Bottle-fed drinks")
 
 
     plt.ylabel("Number of drinks", fontsize=14)
@@ -221,3 +229,25 @@ def save_drinking_data(drinking_data: pd.DataFrame):
     st.success("Drinking Data Updated!")
     st.session_state["drinking_cache"] += 1
     st.rerun()
+
+
+def display_drinking_data(df: pd.DataFrame):
+    """
+    Display the full sleeping data
+    """
+    # Tidy columns
+    df = df[
+        [
+            "feed_date",
+            "duration",
+            "start_side",
+            "start_side_time",
+            "bottle_fed",
+        ]
+    ].reset_index(drop=True)
+    df.index += 1
+    df.columns = [
+        x.replace("_", " ").title().replace("Duration","Duration (Mins)").replace("Time", "Time (Mins)")
+        for x in df.columns
+    ]
+    st.dataframe(df)
