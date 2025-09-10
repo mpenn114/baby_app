@@ -4,7 +4,7 @@ from google.cloud import bigquery
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import numpy as np
 from src.cfg.colour_config import ColourConfig
 
 COLOURS = ColourConfig()
@@ -163,6 +163,25 @@ def display_sleeping():
         ).reset_index(drop=True)
         save_sleeping_data(sleeping_data)
 
+    # Create delete sleep form
+    with col1:
+        with st.form('delete_sleep_form'):
+            st.subheader('Delete Sleep')
+            st.markdown('When the nightmares get too real...')
+            deleted_sleep = st.selectbox(
+                'Select Sleep Start Time', options = sleeping_data['sleep_start_time'].unique()
+            )
+            delete_sleep_button = st.form_submit_button('Delete Sleep')
+    if delete_sleep_button:
+        sleeping_data = sleeping_data[sleeping_data["sleep_start_time"] != deleted_sleep].reset_index(drop=True)
+        save_sleeping_data(sleeping_data)
+
+    # Create plots
+
+    with col2:
+        st.pyplot(plot_total_sleep_by_day(sleeping_data))
+        st.pyplot(plot_settle_time_by_technique(sleeping_data))
+        st.pyplot(plot_sleep_proportion_by_hour(sleeping_data))
     st.markdown("_____________________")
     st.markdown(
         "<h3 style='text-align: center;'>All Sleep Data</h3>", unsafe_allow_html=True
@@ -220,6 +239,142 @@ def save_sleeping_data(sleeping_data: pd.DataFrame):
     st.session_state["sleeping_cache"] += 1
     st.rerun()
 
+
+def plot_total_sleep_by_day(df: pd.DataFrame):
+    """
+    Plot total sleep duration by day.
+    Handles sleep episodes that span multiple days.
+    """
+    # Ensure datetime conversion
+    df["sleep_start_time"] = pd.to_datetime(df["sleep_start_time"])
+    df["sleep_end_time"] = pd.to_datetime(df["sleep_end_time"])
+
+    daily_sleep = []
+
+    for _, row in df.iterrows():
+        start = row["sleep_start_time"]
+        end = row["sleep_end_time"]
+        if pd.isnull(start) or pd.isnull(end):
+            continue
+
+        # Iterate through each day spanned by the interval
+        current = start
+        while current.date() <= end.date():
+            # End of this day (or actual end if earlier)
+            day_end = min(end, pd.Timestamp.combine(current.date(), pd.Timestamp.max.time()))
+            hours = (day_end - current).total_seconds() / 3600
+            daily_sleep.append({"date": current.date(), "hours": hours})
+
+            # Move to start of next day
+            current = pd.Timestamp.combine(current.date() + pd.Timedelta(days=1), pd.Timestamp.min.time())
+
+    # Aggregate
+    if daily_sleep:
+        sleep_by_day = pd.DataFrame(daily_sleep).groupby("date")["hours"].sum()
+    else:
+        sleep_by_day = pd.Series(dtype=float)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
+    scaled_sleep = (sleep_by_day - sleep_by_day.min())/(sleep_by_day.max() - sleep_by_day.min())
+    colors = [tuple(x*c + (1-x) for c in COLOURS.PINK_RGB) for x in scaled_sleep]
+
+    sleep_by_day.plot(kind="bar", ax=ax, color=colors, ec='k')
+    plt.ylabel("Total Sleep (hours)", fontsize=14)
+    plt.title("Total Sleep by Day", fontsize=18)
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    return fig
+
+
+def plot_settle_time_by_technique(
+    df: pd.DataFrame,
+    fill_color: str = COLOURS.PINK_HEX,   # default fill
+    line_color: str = COLOURS.BROWN_HEX     # default line colour
+):
+    """
+    Boxplots of time_to_settle for each settling technique when used,
+    with customisable fill and line colours.
+    """
+    df = df.copy()
+    df = df.dropna(subset=["time_to_settle", "settling_techniques"])
+
+    # Explode repeated techniques
+    df = df.explode("settling_techniques")
+
+    techniques = df["settling_techniques"].unique()
+    data = [df.loc[df["settling_techniques"] == tech, "time_to_settle"] for tech in techniques]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    boxprops = dict(facecolor=fill_color, color=line_color, linewidth=1.5)
+    medianprops = dict(color=line_color, linewidth=2)
+    whiskerprops = dict(color=line_color, linewidth=1.5)
+    capprops = dict(color=line_color, linewidth=1.5)
+
+    bp = ax.boxplot(
+        data,
+        labels=techniques,
+        patch_artist=True,   # allows fill colour
+        boxprops=boxprops,
+        medianprops=medianprops,
+        whiskerprops=whiskerprops,
+        capprops=capprops
+    )
+
+    plt.ylabel("Time to Settle (Mins)", fontsize=14)
+    plt.title("Time to Settle by Technique", fontsize=18)
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    return fig
+def plot_sleep_proportion_by_hour(df: pd.DataFrame) -> plt.Figure:
+    """
+    Calculate the exact proportion of time asleep in each hour of the day (0–23),
+    averaged across all days in the dataset.
+    """
+    df = df.copy()
+    df["sleep_start_time"] = pd.to_datetime(df["sleep_start_time"])
+    df["sleep_end_time"] = pd.to_datetime(df["sleep_end_time"])
+    df = df.dropna(subset=["sleep_start_time", "sleep_end_time"])
+
+    # Track total asleep minutes per hour
+    asleep_minutes = np.zeros(24)
+
+    for _, row in df.iterrows():
+        start, end = row["sleep_start_time"], row["sleep_end_time"]
+
+        # Ensure sleep end is after start (handle overnight if needed)
+        if end <= start:
+            end += pd.Timedelta(days=1)
+
+        # Iterate hour blocks overlapping this sleep period
+        current = start.floor("h")
+        while current < end:
+            next_hour = current + pd.Timedelta(hours=1)
+            overlap_start = max(start, current)
+            overlap_end = min(end, next_hour)
+            minutes_asleep = (overlap_end - overlap_start).total_seconds() / 60.0
+            if minutes_asleep > 0:
+                asleep_minutes[current.hour] += minutes_asleep
+            current = next_hour
+
+    # Number of unique days in dataset (to normalise to "proportion of each day")
+    num_days = df["sleep_start_time"].dt.normalize().nunique()
+    total_minutes_per_hour = num_days * 60.0
+
+    proportions = asleep_minutes / total_minutes_per_hour
+
+    # Colour scale (pink intensity by proportion)
+    colors = [tuple(x*c + (1-x) for c in COLOURS.PINK_RGB) for x in proportions]
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(range(24),100*proportions, color=colors, edgecolor="k")
+    plt.xticks(range(24))
+    plt.xlabel("Hour of Day", fontsize=14)
+    plt.ylabel("Percentage of Time Asleep", fontsize=14)
+    plt.title("Proportion of Time Asleep by Hour of Day", fontsize=18)
+    plt.tight_layout()
+    return fig
 
 def display_sleeping_data(df: pd.DataFrame):
     """
