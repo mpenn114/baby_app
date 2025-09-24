@@ -48,6 +48,16 @@ def run_app():
     else:
         display_drinking()
 
+    # Display a button to allow for resetting the cache
+    st.markdown('___________________')
+    st.markdown(
+        "<h3 style='text-align: center;'>Reset Cache</h3>", unsafe_allow_html=True
+    )
+    st.write("Matt couldn't be bothered to make a proper caching system for multiple users.... If you can't see the latest data then press this button to refresh!") # noqa: E501
+    if st.button('Reset Cache'):
+        st.cache_data.clear()
+        st.session_state.clear()
+        st.rerun()
 
 def verify_user():
     """

@@ -9,8 +9,7 @@ import matplotlib.colors as mcolors
 import matplotlib.dates as mdates
 
 COLOURS = ColourConfig()
-DRINKING_TABLE = "archie-baby-app.baby_app.drinking"
-SETTLING_TECHNIQUES_TABLE = "archie-baby-app.baby_app.settling_techniques"
+DRINKING_TABLE = "archie-baby-app.baby_app.drinking_refactored"
 
 
 def display_drinking():
@@ -30,17 +29,18 @@ def display_drinking():
     col1,col2 = st.columns(2)
     with col1:
         with st.form('add_drinking_data'):
-            st.markdown(
-                    "<h4 style='text-align: center;'>Log New Drink</h4>",
-                    unsafe_allow_html=True,
-            )
-            st.write('Note: If Archie was fed from a bottle, then please leave the side information blank!')
+
             start_date = st.date_input('Start Date')
             start_time = st.time_input('Start Time')
             bottle_fed = st.checkbox('Bottle Fed?')
+            st.markdown('________')
+            st.write('Breastfeed Information (leave blank if bottle fed)')
             side = st.selectbox('Select Start Side',['None','Left','Right'],help = 'This is the side from your point of view')
             start_side_time = st.number_input('Time on Start Side (Minutes)', step=1)
             total_time = st.number_input('Total Time (Minutes)',step=1)
+            st.markdown('________')
+            st.write('Bottle Information (leave blank if breastfed)')
+            total_volume = st.number_input('Feed Volume (ml)', step=1)
 
             add_drink = st.form_submit_button('Add Drink!')
     if add_drink:
@@ -50,10 +50,11 @@ def display_drinking():
             'feed_date':[
                     datetime.combine(start_date, start_time)
                 ],
-            'duration':[total_time],
+            'breastfeed_duration':[total_time],
             'start_side':[side],
             'start_side_time':[start_side_time],
-            'bottle_fed':[bottle_fed]
+            'bottle_fed':[bottle_fed],
+            'bottle_quantity':[total_volume]
 
         })
         drinking_data = pd.concat([drinking_data, new_drink_date])
@@ -74,8 +75,8 @@ def display_drinking():
 
     with col2:
         st.pyplot(plot_drinks_per_day(drinking_data))
-        st.pyplot(plot_drink_duration_per_day(drinking_data))
-        st.pyplot(plot_duration_by_side(drinking_data))
+        st.pyplot(plot_bottle_drink_volume_per_day(drinking_data))
+        st.pyplot(plot_bottle_drink_volume_rolling_24h(drinking_data))
 
     st.markdown("_____________________")
     st.markdown(
@@ -134,7 +135,7 @@ def _get_gradient_colours(values:pd.Series, hex_colour:str, minimum:float = None
     return [cmap(norm(v)) for v in values]
 
 
-def plot_drink_duration_per_day(df: pd.DataFrame):
+def plot_bottle_drink_volume_per_day(df: pd.DataFrame):
     """
     Plot total duration of drinks per day (based on feed start day).
     Colours scaled white → pink.
@@ -143,15 +144,15 @@ def plot_drink_duration_per_day(df: pd.DataFrame):
     df["feed_date"] = pd.to_datetime(df["feed_date"])
     df["day"] = df["feed_date"].dt.date
 
-    duration_by_day = df.groupby("day")["duration"].sum()
+    duration_by_day = df.dropna(subset=['bottle_quantity']).groupby("day")["bottle_quantity"].sum()
     colours = _get_gradient_colours(duration_by_day.values, COLOURS.PINK_HEX)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.bar(duration_by_day.index, duration_by_day.values, color=colours, ec='k')
 
-    plt.ylabel("Total Duration (minutes)", fontsize=14)
+    plt.ylabel("Total Volume (ml)", fontsize=14)
     plt.xlabel("Date", fontsize=14)
-    plt.title("Total Drink Duration per Day", fontsize=18)
+    plt.title("Total Bottle Drink Volume Per Day", fontsize=18)
     plt.xticks(rotation=45, ha="right")
     # Ensure that there are whole days shown on the x axis
     locator = mdates.AutoDateLocator(
@@ -160,7 +161,36 @@ def plot_drink_duration_per_day(df: pd.DataFrame):
     ax.xaxis.set_major_locator(locator)
     plt.tight_layout()
     return fig
+def plot_bottle_drink_volume_rolling_24h(df: pd.DataFrame):
+    """
+    Plot the rolling 24-hour total bottle quantity.
+    Each point represents the total intake over the previous 24 hours.
+    """
+    df = df.copy()
+    df["feed_date"] = pd.to_datetime(df["feed_date"])
+    df = df.dropna(subset=["bottle_quantity"])
+    df = df.set_index("feed_date").sort_index()
 
+    # Resample to an hourly total (adjust frequency if you need finer resolution)
+    hourly = df["bottle_quantity"].resample("1h").sum()
+
+    # Rolling 24-hour total
+    rolling_24h_total = hourly.rolling("24h").sum()
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(rolling_24h_total.index, rolling_24h_total.values, color=COLOURS.PINK_HEX, lw=2)
+
+    ax.set_ylabel("Rolling 24-Hour Total (ml)", fontsize=14)
+    ax.set_xlabel("Date", fontsize=14)
+    ax.set_title("Bottle Intake: Rolling 24-Hour Total", fontsize=18)
+
+    locator = mdates.AutoDateLocator(minticks=1, maxticks=10, interval_multiples=True)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%b"))
+    plt.xticks(rotation=45, ha="right")
+
+    plt.tight_layout()
+    return fig
 
 def plot_duration_by_side(df: pd.DataFrame):
     """
@@ -211,10 +241,12 @@ def save_drinking_data(drinking_data: pd.DataFrame):
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         schema=[
             bigquery.SchemaField("feed_date", "DATETIME"),
-            bigquery.SchemaField("duration", "FLOAT"),
+            bigquery.SchemaField("breastfeed_duration", "FLOAT"),
             bigquery.SchemaField("start_side", "STRING"),
             bigquery.SchemaField("start_side_time", "FLOAT"),
-            bigquery.SchemaField('bottle_fed','BOOLEAN')
+            bigquery.SchemaField('bottle_fed','BOOLEAN'),
+            bigquery.SchemaField('bottle_quantity','FLOAT'),
+
 
         ],
     )
@@ -239,15 +271,16 @@ def display_drinking_data(df: pd.DataFrame):
     df = df[
         [
             "feed_date",
-            "duration",
+            "bottle_fed",
+            "breastfeed_duration",
             "start_side",
             "start_side_time",
-            "bottle_fed",
+            'bottle_quantity'
         ]
     ].reset_index(drop=True)
     df.index += 1
     df.columns = [
-        x.replace("_", " ").title().replace("Duration","Duration (Mins)").replace("Time", "Time (Mins)")
+        x.replace("_", " ").title().replace("Duration","Duration (Mins)").replace("Time", "Time (Mins)").replace('Quantity','Quantity (ml)')
         for x in df.columns
     ]
     st.dataframe(df)
