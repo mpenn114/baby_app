@@ -114,7 +114,8 @@ def plot_drinks_per_day(df: pd.DataFrame):
     bottle_counts.plot(ax=ax, marker="o", color='k', label="Bottle-fed drinks")
 
 
-    plt.ylabel("Number of drinks", fontsize=14)
+    plt.ylabel("Number of Drinks", fontsize=14)
+    plt.xlabel("Date",fontsize=14)
     plt.title("Number of Drinks per Day", fontsize=18)
     ax.legend()
     plt.xticks(rotation=45, ha="right")
@@ -123,6 +124,7 @@ def plot_drinks_per_day(df: pd.DataFrame):
         minticks=1, maxticks=10, interval_multiples=True
     )
     ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%b"))
     plt.tight_layout()
     return fig
 
@@ -159,6 +161,7 @@ def plot_bottle_drink_volume_per_day(df: pd.DataFrame):
         minticks=1, maxticks=10, interval_multiples=True
     )
     ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%b"))
     plt.tight_layout()
     return fig
 def plot_bottle_drink_volume_rolling_24h(df: pd.DataFrame):
