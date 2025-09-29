@@ -6,7 +6,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from src.cfg.colour_config import ColourConfig
-
+from matplotlib.figure import Figure
 COLOURS = ColourConfig()
 NAPPY_TABLE = "archie-baby-app.baby_app.nappies"
 
@@ -161,6 +161,10 @@ def display_bowels():
         plt.yticks(fontsize=14)
         st.pyplot(fig)
 
+    # Plot nappies by time
+    with col2:
+        st.pyplot(create_nappies_by_time_chart(nappies_data))
+
     st.markdown("_____________________")
     st.markdown(
         "<h3 style='text-align: center;'>All Nappies</h3>", unsafe_allow_html=True
@@ -170,6 +174,45 @@ def display_bowels():
         unsafe_allow_html=True,
     )
     display_nappies_data(nappies_data)
+
+def create_nappies_by_time_chart(nappy_data:pd.DataFrame) -> Figure:
+    """
+    Display the nappies changed by hours of the day
+    """
+    # Extract the hour from each nappy
+    nappy_data['nappy_hour'] = nappy_data['nappy_time'].apply(lambda x:x.hour)
+
+    # Group the data
+    grouped_data = nappy_data.groupby(['nappy_changer','nappy_hour']).agg(count = ('nappy_hour','count')).reset_index()
+
+    # Create the figure
+    fig,ax = plt.subplots(figsize=(12,8))
+
+    # Separate the data
+    matt_data = grouped_data[grouped_data['nappy_changer'] == 'Matt'].reset_index(drop=True)
+    grace_data = grouped_data[grouped_data['nappy_changer'] == 'Grace'].reset_index(drop=True)
+
+    # Add Grace data into Matt's
+    matt_data['grace_count'] = matt_data['nappy_hour'].map(grace_data.set_index('nappy_hour')['count'].to_dict()).fillna(0)
+    grace_data['matt_count'] = grace_data['nappy_hour'].map(matt_data.set_index('nappy_hour')['count'].to_dict()).fillna(0)
+
+    # Plot Matt's data
+    plt.barh(matt_data['nappy_hour'],matt_data['count'],ec='k',color =[COLOURS.GREY_YELLOW_HEX if x['grace_count'] > x['count'] else COLOURS.YELLOW_HEX for _,x in matt_data.iterrows()], label='Matt',
+             )
+
+    # Plot Grace's data
+    plt.barh(grace_data['nappy_hour'],(-1)*grace_data['count'],ec='k',color =[COLOURS.GREY_PINK_HEX if x['matt_count'] > x['count'] else COLOURS.PINK_HEX for _,x in grace_data.iterrows()], label='Grace')
+
+    # Format
+    plt.yticks(range(24), [f'{x}:00' for x in range(24)])
+    plt.ylabel('Time', fontsize=14)
+    plt.xlabel('Nappies Changed', fontsize=14)
+    plt.xticks(ax.get_xticks(), [str(abs(int(x))) for x in ax.get_xticks()])
+    plt.title('Nappies Changed By Time (Grace v Matt)', fontsize=24)
+    plt.legend(fontsize=14)
+    ax.grid(axis='y',alpha=0.5)
+    return fig
+
 
 
 def display_nappies_data(df: pd.DataFrame):
