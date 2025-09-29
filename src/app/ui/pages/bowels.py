@@ -64,7 +64,7 @@ def display_bowels():
             }
         )
         overall_nappy_data = pd.concat([nappies_data, new_nappy])
-        save_nappies_data(overall_nappy_data)
+        save_nappies_data(overall_nappy_data,expected_length_difference=1)
 
     with col1:
         with st.form("nappy_deletion"):
@@ -85,7 +85,7 @@ def display_bowels():
             )
     if delete_form_submit:
         nappies_data = nappies_data[nappy_date_time != selected_nappy]
-        save_nappies_data(nappies_data)
+        save_nappies_data(nappies_data,expected_length_difference=-1)
 
     # Plot the nappies over time
     with col2:
@@ -210,11 +210,23 @@ def get_nappies_data(cache_index: int) -> pd.DataFrame:
     client = bq_client()
     return client.query(f"SELECT * FROM {NAPPY_TABLE}").to_dataframe()
 
-
-def save_nappies_data(nappy_data: pd.DataFrame):
+def save_nappies_data(nappy_data: pd.DataFrame, expected_length_difference:int):
     """
     Save the nappy data
+
+    Args:
+        drinking_data (pd.DataFrame): The drinking data to save
+        expected_length_difference (int): The expected difference in length between the new data
+            and the true dataset
     """
+    # Get the (uncached) length of the true dataset
+    client = bq_client()
+    table_length = client.query(f"SELECT COUNT(*) AS length FROM {NAPPY_TABLE}").to_dataframe()['length'].to_numpy()[0]
+
+    # Assert that the length is as expected
+    if len(nappy_data) != table_length + expected_length_difference:
+        st.toast('Unable to save data - please ensure that you have reset the cache to get the most recent table! This can be done using the button at the bottom of the page.') # noqa: E501
+        return
     # Job config to overwrite table
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE

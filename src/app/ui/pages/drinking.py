@@ -58,7 +58,7 @@ def display_drinking():
 
         })
         drinking_data = pd.concat([drinking_data, new_drink_date])
-        save_drinking_data(drinking_data)
+        save_drinking_data(drinking_data, expected_length_difference=1)
 
     with col1:
         with st.form('delete_drink'):
@@ -71,7 +71,7 @@ def display_drinking():
             delete_drink = st.form_submit_button('Delete Drink')
     if delete_drink:
         drinking_data = drinking_data[drinking_data['feed_date']!=delete_drink_time].reset_index(drop=True)
-        save_drinking_data(drinking_data)
+        save_drinking_data(drinking_data, expected_length_difference=-1)
 
     with col2:
         st.pyplot(plot_drinks_per_day(drinking_data))
@@ -227,10 +227,24 @@ def plot_duration_by_side(df: pd.DataFrame):
     plt.tight_layout()
     return fig
 
-def save_drinking_data(drinking_data: pd.DataFrame):
+def save_drinking_data(drinking_data: pd.DataFrame, expected_length_difference:int):
     """
     Save the drinking data
+
+    Args:
+        drinking_data (pd.DataFrame): The drinking data to save
+        expected_length_difference (int): The expected difference in length between the new data
+            and the true dataset
     """
+    # Get the (uncached) length of the true dataset
+    client = bq_client()
+    table_length = client.query(f"SELECT COUNT(*) AS length FROM {DRINKING_TABLE}").to_dataframe()['length'].to_numpy()[0]
+
+    # Assert that the length is as expected
+    if len(drinking_data) != table_length + expected_length_difference:
+        st.toast('Unable to save data - please ensure that you have reset the cache to get the most recent table! This can be done using the button at the bottom of the page.') # noqa: E501
+        return
+
     # Ensure data has the correct type
     drinking_data["feed_date"] = pd.to_datetime(
         drinking_data["feed_date"]
