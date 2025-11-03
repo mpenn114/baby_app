@@ -1,5 +1,5 @@
 import streamlit as st
-from src.app.ui import display_bowels, display_drinking, display_sleeping
+from src.app.ui import display_bowels, display_drinking, display_pumping
 import matplotlib.pyplot as plt
 from src.cfg.colour_config import ColourConfig
 from matplotlib import font_manager
@@ -36,15 +36,15 @@ def run_app():
         "<h4 style='text-align: center;'>Archie Penn: 2025</h4>", unsafe_allow_html=True
     )
     st.markdown("_____________")
-    pages = {"Bowels": "💩", "Sleeping": "😴", "Drinking": "🍼"}
+    pages = {"Bowels": "💩", "Pumping": "⛽", "Drinking": "🍼"}
     selected_page = st.sidebar.selectbox(
         "Choose Page", pages.keys(), format_func=lambda x: f"{pages.get(x)} {x}"
     )
 
     if selected_page == "Bowels":
         display_bowels()
-    elif selected_page == "Sleeping":
-        display_sleeping()
+    elif selected_page == "Pumping":
+        display_pumping()
     else:
         display_drinking()
 
