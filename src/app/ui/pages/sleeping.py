@@ -37,13 +37,7 @@ def display_sleeping():
             nap_end_time = st.time_input("End Time")
             nap_location = st.selectbox(
                 "Location",
-                options=list(
-                    set(
-                        ["Moses Basket", "Car Seat", "Pram"]
-                        + sleeping_data["sleep_location"].dropna().unique().tolist()
-                    )
-                ),
-                accept_new_options=True,
+                options=["Pram", "Cot"],
             )
             nap_submit = st.form_submit_button("Log Nap")
 
@@ -58,13 +52,7 @@ def display_sleeping():
             settle_mins = st.number_input("Time to Settle (Minutes)", min_value=0)
             bed_location = st.selectbox(
                 "Location",
-                options=list(
-                    set(
-                        ["Moses Basket", "Cot", "Car Seat"]
-                        + sleeping_data["sleep_location"].dropna().unique().tolist()
-                    )
-                ),
-                accept_new_options=True,
+                options=["Pram", "Cot"],
             )
             existing_techniques = list(
                 set(
