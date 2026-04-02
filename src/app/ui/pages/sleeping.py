@@ -206,6 +206,22 @@ def display_sleeping():
         st.pyplot(plot_evening_wakeups(night_data))
         st.pyplot(plot_sleep_proportion_by_hour(sleeping_data))
 
+    # --- Sleep timeline ---
+    st.markdown("_____________________")
+    st.markdown(
+        "<h3 style='text-align: center;'>Sleep Timeline</h3>", unsafe_allow_html=True
+    )
+    all_dates = pd.to_datetime(sleeping_data["sleep_start_time"]).dt.date
+    default_start = max(all_dates.min(), all_dates.max() - pd.Timedelta(days=13)) if len(all_dates) > 0 else datetime.today().date()
+    default_end = all_dates.max() if len(all_dates) > 0 else datetime.today().date()
+    timeline_range = st.date_input(
+        "Date range",
+        value=(default_start, default_end),
+        key="timeline_range",
+    )
+    if isinstance(timeline_range, (list, tuple)) and len(timeline_range) == 2:
+        st.pyplot(plot_sleep_timeline(sleeping_data, timeline_range[0], timeline_range[1]))
+
     # --- Data table ---
     st.markdown("_____________________")
     st.markdown(
@@ -500,6 +516,71 @@ def plot_sleep_proportion_by_hour(df: pd.DataFrame) -> plt.Figure:
     plt.xlabel("Hour of Day", fontsize=13)
     plt.ylabel("% of Time Asleep", fontsize=13)
     plt.title("Proportion of Time Asleep by Hour", fontsize=18)
+    plt.tight_layout()
+    return fig
+
+
+def plot_sleep_timeline(df: pd.DataFrame, start_date, end_date) -> plt.Figure:
+    """
+    Vertical bars per day showing shaded blocks for settling (light pink) and
+    asleep (dark pink) periods across a chosen date range.
+    Y-axis runs midnight-to-midnight (0 at top, 24 at bottom).
+    """
+    from matplotlib.patches import Patch
+
+    df = df.copy()
+    df["sleep_start_time"] = pd.to_datetime(df["sleep_start_time"])
+    df["sleep_end_time"] = pd.to_datetime(df["sleep_end_time"])
+    df = df.dropna(subset=["sleep_start_time", "sleep_end_time"])
+
+    dates = pd.date_range(start_date, end_date, freq="D")
+    n = len(dates)
+    fig, ax = plt.subplots(figsize=(max(8, n * 0.9), 7))
+
+    for i, day in enumerate(dates):
+        day_start = pd.Timestamp(day.date())
+        day_end = day_start + pd.Timedelta(hours=24)
+
+        for _, row in df.iterrows():
+            sleep_start = row["sleep_start_time"]
+            sleep_end = row["sleep_end_time"]
+            settle_mins = float(row["time_to_settle"]) if pd.notna(row["time_to_settle"]) else 0.0
+            settle_end = sleep_start + pd.Timedelta(minutes=settle_mins)
+
+            # Settling block
+            s0 = max(sleep_start, day_start)
+            s1 = min(settle_end, day_end)
+            if s0 < s1:
+                y0 = (s0 - day_start).total_seconds() / 3600
+                y1 = (s1 - day_start).total_seconds() / 3600
+                ax.bar(i, y1 - y0, bottom=y0, width=0.7,
+                       color=COLOURS.GREY_PINK_HEX, edgecolor=COLOURS.BROWN_HEX, linewidth=0.5, zorder=2)
+
+            # Asleep block
+            a0 = max(settle_end, day_start)
+            a1 = min(sleep_end, day_end)
+            if a0 < a1:
+                y0 = (a0 - day_start).total_seconds() / 3600
+                y1 = (a1 - day_start).total_seconds() / 3600
+                ax.bar(i, y1 - y0, bottom=y0, width=0.7,
+                       color=COLOURS.PINK_HEX, edgecolor=COLOURS.BROWN_HEX, linewidth=0.5, zorder=2)
+
+    ax.set_ylim(24, 0)  # midnight at top, noon in middle
+    ax.set_yticks(range(0, 25, 2))
+    ax.set_yticklabels([f"{h:02d}:00" for h in range(0, 25, 2)])
+    ax.set_ylabel("Time of Day", fontsize=13)
+    ax.set_xticks(range(n))
+    ax.set_xticklabels([d.strftime("%d %b") for d in dates], rotation=45, ha="right")
+
+    ax.legend(
+        handles=[
+            Patch(facecolor=COLOURS.PINK_HEX, edgecolor=COLOURS.BROWN_HEX, label="Asleep"),
+            Patch(facecolor=COLOURS.GREY_PINK_HEX, edgecolor=COLOURS.BROWN_HEX, label="Settling"),
+        ],
+        loc="upper right",
+    )
+    ax.yaxis.grid(True, linestyle="--", alpha=0.4, zorder=0)
+    plt.title("Sleep Timeline", fontsize=18)
     plt.tight_layout()
     return fig
 
