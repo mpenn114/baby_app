@@ -58,7 +58,7 @@ def display_sleeping():
                 set(
                     x
                     for _, row in sleeping_data.iterrows()
-                    for x in (row["settling_techniques"] or [])
+                    for x in (row["settling_techniques"] if isinstance(row["settling_techniques"], (list, np.ndarray)) else [])
                 )
             )
             bed_techniques = st.multiselect(
@@ -163,7 +163,7 @@ def display_sleeping():
         else:
             wake_list = [
                 pd.to_datetime(x).to_pydatetime()
-                for x in list(original["temporary_wake_up_times"] or [])
+                for x in list(original["temporary_wake_up_times"] if isinstance(original["temporary_wake_up_times"], (list, np.ndarray)) else [])
             ]
             wake_list.append(wakeup_dt)
             updated = pd.DataFrame(
@@ -517,7 +517,7 @@ def display_sleeping_data(df: pd.DataFrame):
     ]
     df = df[[c for c in cols if c in df.columns]].reset_index(drop=True)
     df["temporary_wake_up_times"] = df["temporary_wake_up_times"].apply(
-        lambda lst: [pd.to_datetime(x).strftime("%Y-%m-%d %H:%M") for x in (lst or [])]
+        lambda lst: [pd.to_datetime(x).strftime("%Y-%m-%d %H:%M") for x in (lst if isinstance(lst, (list, np.ndarray)) else [])]
     )
     df.index += 1
     df.columns = [
