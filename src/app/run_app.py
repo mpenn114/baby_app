@@ -1,5 +1,5 @@
 import streamlit as st
-from src.app.ui import display_bowels, display_drinking, display_pumping
+from src.app.ui import display_bowels, display_drinking, display_pumping, display_sleeping
 import matplotlib.pyplot as plt
 from src.cfg.colour_config import ColourConfig
 from matplotlib import font_manager
@@ -36,17 +36,19 @@ def run_app():
         "<h4 style='text-align: center;'>Archie Penn: 2025</h4>", unsafe_allow_html=True
     )
     st.markdown("_____________")
-    pages = {"Bowels": "💩", "Pumping": "⛽", "Drinking": "🍼"}
+    pages = {"Sleeping": "😴", "Drinking": "🍼", "Pumping": "⛽", "Bowels": "💩"}
     selected_page = st.sidebar.selectbox(
         "Choose Page", pages.keys(), format_func=lambda x: f"{pages.get(x)} {x}"
     )
 
-    if selected_page == "Bowels":
-        display_bowels()
+    if selected_page == "Sleeping":
+        display_sleeping()
+    elif selected_page == "Drinking":
+        display_drinking()
     elif selected_page == "Pumping":
         display_pumping()
     else:
-        display_drinking()
+        display_bowels()
 
     # Display a button to allow for resetting the cache
     st.markdown('___________________')

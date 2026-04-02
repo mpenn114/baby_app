@@ -4,184 +4,221 @@ from google.cloud import bigquery
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 from src.cfg.colour_config import ColourConfig
 
 COLOURS = ColourConfig()
 SLEEPING_TABLE = "archie-baby-app.baby_app.sleeping"
-SETTLING_TECHNIQUES_TABLE = "archie-baby-app.baby_app.settling_techniques"
 
 
 def display_sleeping():
-    """
-    Display the sleeping page
-    """
-    # Display the title
+    """Display the sleeping page"""
     st.markdown(
         "<h1 style='text-align: center;'>Sleeping 😴</h1>", unsafe_allow_html=True
     )
 
-    # Retrieve the sleeping data
     if "sleeping_cache" not in st.session_state:
         st.session_state["sleeping_cache"] = 0
     sleeping_data = get_sleeping_data(st.session_state["sleeping_cache"]).sort_values(
         by=["sleep_start_time"], ascending=False
     )
 
-    # Create the new sleeping form
     col1, col2 = st.columns(2)
+
     with col1:
-        with st.form("sleep_start_form"):
+        # --- Log Nap ---
+        with st.form("nap_form"):
             st.markdown(
-                "<h4 style='text-align: center;'>Log New Sleep</h4>",
-                unsafe_allow_html=True,
+                "<h4 style='text-align: center;'>Log Nap</h4>", unsafe_allow_html=True
             )
-            st.write(
-                "Note: Please enter the time at which Archie went to sleep. Time taken to settle Archie is logged separately."  # noqa: E501
-            )
-            sleep_start_date = st.date_input("Sleep Start Date", value=datetime.today())
-            sleep_start_time = st.time_input("Sleep Start Time")
-            settle_time = st.number_input("Time to Settle (Minutes)", min_value=0)
-            sleep_location = st.selectbox(
-                "Sleep Location",
+            nap_date = st.date_input("Nap Date", value=datetime.today())
+            nap_start_time = st.time_input("Start Time")
+            nap_end_time = st.time_input("End Time")
+            nap_location = st.selectbox(
+                "Location",
                 options=list(
                     set(
-                        ["Moses Basket", "Car Seat"]
-                        + sleeping_data["sleep_location"].unique().tolist()
+                        ["Moses Basket", "Car Seat", "Pram"]
+                        + sleeping_data["sleep_location"].dropna().unique().tolist()
                     )
                 ),
                 accept_new_options=True,
             )
-            # Add options for settling techniques
-            settling_techniques = st.multiselect(
+            nap_submit = st.form_submit_button("Log Nap")
+
+        # --- Log Bedtime ---
+        with st.form("bedtime_form"):
+            st.markdown(
+                "<h4 style='text-align: center;'>Log Bedtime</h4>",
+                unsafe_allow_html=True,
+            )
+            bed_date = st.date_input("Date", value=datetime.today())
+            bed_time_input = st.time_input("Bedtime")
+            settle_mins = st.number_input("Time to Settle (Minutes)", min_value=0)
+            bed_location = st.selectbox(
+                "Location",
+                options=list(
+                    set(
+                        ["Moses Basket", "Cot", "Car Seat"]
+                        + sleeping_data["sleep_location"].dropna().unique().tolist()
+                    )
+                ),
+                accept_new_options=True,
+            )
+            existing_techniques = list(
+                set(
+                    x
+                    for _, row in sleeping_data.iterrows()
+                    for x in (row["settling_techniques"] or [])
+                )
+            )
+            bed_techniques = st.multiselect(
                 "Settling Techniques",
                 options=list(
                     set(
-                        ["Singing", "Bouncing"]
-                        + [
-                            x
-                            for _, row in sleeping_data.iterrows()
-                            for x in row["settling_techniques"]
-                        ]
+                        ["Singing", "Bouncing", "Feeding", "Dummy"]
+                        + existing_techniques
                     )
                 ),
             )
-            # Add submission button
-            new_sleep_submission = st.form_submit_button("Upload Sleep")
+            bedtime_submit = st.form_submit_button("Log Bedtime")
 
-    # Upload new sleep data
-    if new_sleep_submission:
-        if len(sleeping_data) == 0:
-            sleep_id = 0
-        else:
-            sleep_id = sleeping_data["sleep_id"].max() + 1
-        new_sleep_data = pd.DataFrame(
-            {
-                "sleep_id": [sleep_id],
-                "sleep_start_time": [
-                    datetime.combine(sleep_start_date, sleep_start_time)
-                ],
-                "time_to_settle": [settle_time],
-                "sleep_location": [sleep_location],
-                "settling_techniques": [settling_techniques],
-            }
-        )
-        sleeping_data = pd.concat([sleeping_data, new_sleep_data])
-        save_sleeping_data(sleeping_data)
-
-    # Add sleep end
-    with col1:
-        with st.form("sleep_end_form"):
+        # --- Log Wake Up ---
+        open_sleeps = sleeping_data[pd.isna(sleeping_data["sleep_end_time"])][
+            "sleep_start_time"
+        ].unique().tolist()
+        with st.form("wakeup_form"):
             st.markdown(
                 "<h4 style='text-align: center;'>Log Wake Up</h4>",
                 unsafe_allow_html=True,
             )
-            st.write("All good things....")
-            orig_sleep_start_date = st.selectbox(
-                "Select Sleep",
-                options=sleeping_data[pd.isna(sleeping_data["sleep_end_time"])][
-                    "sleep_start_time"
-                ]
-                .unique()
-                .tolist(),
+            if open_sleeps:
+                selected_sleep = st.selectbox("Select Sleep", options=open_sleeps)
+            else:
+                st.caption("No open sleeps to wake up from!")
+                selected_sleep = None
+                st.selectbox("Select Sleep", options=[], disabled=True)
+            wakeup_date = st.date_input("Wake Up Date")
+            wakeup_time_val = st.time_input("Wake Up Time")
+            is_temporary = st.checkbox("Evening / Temporary Wake Up?")
+            wakeup_submit = st.form_submit_button("Log Wake Up")
+
+        # --- Delete Sleep ---
+        with st.form("delete_form"):
+            st.markdown(
+                "<h4 style='text-align: center;'>Delete Sleep</h4>",
+                unsafe_allow_html=True,
             )
+            st.caption("When the nightmares get too real...")
+            del_sleep = st.selectbox(
+                "Select Sleep", options=sleeping_data["sleep_start_time"].unique()
+            )
+            delete_submit = st.form_submit_button("Delete Sleep")
 
-            wake_up_date = st.date_input("Wake Up Date")
-            wake_up_time = st.time_input("Wake Up Time")
-            temporary_wakeup = st.checkbox("Temporary Wake Up?")
+    # --- Handle submissions ---
+    if nap_submit:
+        new_id = 0 if len(sleeping_data) == 0 else int(sleeping_data["sleep_id"].max()) + 1
+        new_nap = pd.DataFrame(
+            {
+                "sleep_id": [new_id],
+                "sleep_start_time": [datetime.combine(nap_date, nap_start_time)],
+                "sleep_end_time": [datetime.combine(nap_date, nap_end_time)],
+                "time_to_settle": [0],
+                "sleep_location": [nap_location],
+                "settling_techniques": [[]],
+                "temporary_wake_up_times": [[]],
+                "sleep_type": ["Nap"],
+            }
+        )
+        save_sleeping_data(
+            pd.concat([sleeping_data, new_nap]).reset_index(drop=True)
+        )
 
-            # Add submission button
-            sleep_end_button = st.form_submit_button("Upload Wake Up")
+    if bedtime_submit:
+        new_id = 0 if len(sleeping_data) == 0 else int(sleeping_data["sleep_id"].max()) + 1
+        new_night = pd.DataFrame(
+            {
+                "sleep_id": [new_id],
+                "sleep_start_time": [datetime.combine(bed_date, bed_time_input)],
+                "sleep_end_time": [pd.NaT],
+                "time_to_settle": [int(settle_mins)],
+                "sleep_location": [bed_location],
+                "settling_techniques": [bed_techniques],
+                "temporary_wake_up_times": [[]],
+                "sleep_type": ["Night"],
+            }
+        )
+        save_sleeping_data(
+            pd.concat([sleeping_data, new_night]).reset_index(drop=True)
+        )
 
-    # Upload new wake up data
-    if sleep_end_button:
-        # Get the corresponding sleep data
-        original_sleep_data = sleeping_data[
-            sleeping_data["sleep_start_time"] == orig_sleep_start_date
+    if wakeup_submit and selected_sleep is not None:
+        original = sleeping_data[
+            sleeping_data["sleep_start_time"] == selected_sleep
         ].iloc[0]
-
-        if not temporary_wakeup:
-            # Add the end of the sleep
-            new_sleep_data = pd.DataFrame(
+        wakeup_dt = datetime.combine(wakeup_date, wakeup_time_val)
+        sleep_type = original["sleep_type"] if pd.notna(original.get("sleep_type")) else "Night"
+        if not is_temporary:
+            updated = pd.DataFrame(
                 {
-                    "sleep_id": [original_sleep_data["sleep_id"]],
-                    "sleep_start_time": [original_sleep_data["sleep_start_time"]],
-                    "sleep_end_time": [datetime.combine(wake_up_date, wake_up_time)],
-                    "time_to_settle": [original_sleep_data["time_to_settle"]],
-                    "sleep_location": [original_sleep_data["sleep_location"]],
-                    "settling_techniques": [original_sleep_data["settling_techniques"]],
-                    "temporary_wake_up_times": [
-                        original_sleep_data["temporary_wake_up_times"]
-                    ],
+                    "sleep_id": [original["sleep_id"]],
+                    "sleep_start_time": [original["sleep_start_time"]],
+                    "sleep_end_time": [wakeup_dt],
+                    "time_to_settle": [original["time_to_settle"]],
+                    "sleep_location": [original["sleep_location"]],
+                    "settling_techniques": [original["settling_techniques"]],
+                    "temporary_wake_up_times": [original["temporary_wake_up_times"]],
+                    "sleep_type": [sleep_type],
                 }
             )
         else:
-            # Update the temporary wake up list, ensuring
-            # everything in the list is Python datetime
-            wake_up_list = list(original_sleep_data["temporary_wake_up_times"])
-            wake_up_list = [pd.to_datetime(x).to_pydatetime() for x in wake_up_list]
-
-            wake_up_list.append(datetime.combine(wake_up_date, wake_up_time))
-            # Add the temporary wake-up time
-            new_sleep_data = pd.DataFrame(
+            wake_list = [
+                pd.to_datetime(x).to_pydatetime()
+                for x in list(original["temporary_wake_up_times"] or [])
+            ]
+            wake_list.append(wakeup_dt)
+            updated = pd.DataFrame(
                 {
-                    "sleep_id": [original_sleep_data["sleep_id"]],
-                    "sleep_start_time": [original_sleep_data["sleep_start_time"]],
-                    "time_to_settle": [original_sleep_data["time_to_settle"]],
-                    "sleep_location": [original_sleep_data["sleep_location"]],
-                    "settling_techniques": [original_sleep_data["settling_techniques"]],
-                    "temporary_wake_up_times": [wake_up_list],
+                    "sleep_id": [original["sleep_id"]],
+                    "sleep_start_time": [original["sleep_start_time"]],
+                    "sleep_end_time": [pd.NaT],
+                    "time_to_settle": [original["time_to_settle"]],
+                    "sleep_location": [original["sleep_location"]],
+                    "settling_techniques": [original["settling_techniques"]],
+                    "temporary_wake_up_times": [wake_list],
+                    "sleep_type": [sleep_type],
                 }
             )
-        sleeping_data = pd.concat(
-            [
-                sleeping_data[
-                    sleeping_data["sleep_start_time"] != orig_sleep_start_date
-                ],
-                new_sleep_data,
-            ]
-        ).reset_index(drop=True)
-        save_sleeping_data(sleeping_data)
+        save_sleeping_data(
+            pd.concat(
+                [
+                    sleeping_data[sleeping_data["sleep_start_time"] != selected_sleep],
+                    updated,
+                ]
+            ).reset_index(drop=True)
+        )
 
-    # Create delete sleep form
-    with col1:
-        with st.form('delete_sleep_form'):
-            st.subheader('Delete Sleep')
-            st.markdown('When the nightmares get too real...')
-            deleted_sleep = st.selectbox(
-                'Select Sleep Start Time', options = sleeping_data['sleep_start_time'].unique()
+    if delete_submit:
+        save_sleeping_data(
+            sleeping_data[sleeping_data["sleep_start_time"] != del_sleep].reset_index(
+                drop=True
             )
-            delete_sleep_button = st.form_submit_button('Delete Sleep')
-    if delete_sleep_button:
-        sleeping_data = sleeping_data[sleeping_data["sleep_start_time"] != deleted_sleep].reset_index(drop=True)
-        save_sleeping_data(sleeping_data)
+        )
 
-    # Create plots
+    # --- Charts ---
+    night_data = sleeping_data[sleeping_data["sleep_type"] == "Night"].copy()
+    nap_data = sleeping_data[sleeping_data["sleep_type"] == "Nap"].copy()
 
     with col2:
+        st.pyplot(plot_settle_time_over_time(night_data))
         st.pyplot(plot_total_sleep_by_day(sleeping_data))
-        st.pyplot(plot_settle_time_by_technique(sleeping_data))
+        if len(nap_data) > 0:
+            st.pyplot(plot_nap_duration_by_day(nap_data))
+        st.pyplot(plot_evening_wakeups(night_data))
         st.pyplot(plot_sleep_proportion_by_hour(sleeping_data))
+
+    # --- Data table ---
     st.markdown("_____________________")
     st.markdown(
         "<h3 style='text-align: center;'>All Sleep Data</h3>", unsafe_allow_html=True
@@ -195,24 +232,30 @@ def display_sleeping():
 
 @st.cache_data(show_spinner="Shh... The baby's sleeping!")
 def get_sleeping_data(cache_index: int) -> pd.DataFrame:
-    """
-    Get the sleeping data from GBQ
-    """
+    """Get the sleeping data from BigQuery"""
     client = bq_client()
-    return client.query(f"SELECT * FROM {SLEEPING_TABLE}").to_dataframe()
+    df = client.query(f"SELECT * FROM {SLEEPING_TABLE}").to_dataframe()
+    # Backward compat: existing records are night sleeps
+    if "sleep_type" not in df.columns:
+        df["sleep_type"] = "Night"
+    else:
+        df["sleep_type"] = df["sleep_type"].fillna("Night")
+    return df
 
 
 def save_sleeping_data(sleeping_data: pd.DataFrame):
-    """
-    Save the sleeping data
-    """
-    # Ensure data has the correct type
+    """Save the sleeping data"""
     sleeping_data["sleep_start_time"] = pd.to_datetime(
         sleeping_data["sleep_start_time"]
     )
     sleeping_data["sleep_end_time"] = pd.to_datetime(sleeping_data["sleep_end_time"])
 
-    # Job config to overwrite table
+    # Fill missing sleep_type
+    if "sleep_type" not in sleeping_data.columns:
+        sleeping_data["sleep_type"] = "Night"
+    else:
+        sleeping_data["sleep_type"] = sleeping_data["sleep_type"].fillna("Night")
+
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         schema=[
@@ -225,174 +268,268 @@ def save_sleeping_data(sleeping_data: pd.DataFrame):
             ),
             bigquery.SchemaField("settling_techniques", "STRING", mode="REPEATED"),
             bigquery.SchemaField("sleep_id", "INTEGER"),
+            bigquery.SchemaField("sleep_type", "STRING"),
         ],
     )
 
-    # Upload dataframe
     job = bq_client().load_table_from_dataframe(
         sleeping_data, SLEEPING_TABLE, job_config=job_config
     )
-    job.result()  # Wait for the job to complete
+    job.result()
 
-    # Update cache and rerun
     st.success("Sleeping Data Updated!")
     st.session_state["sleeping_cache"] += 1
     st.rerun()
 
 
-def plot_total_sleep_by_day(df: pd.DataFrame):
+def plot_settle_time_over_time(df: pd.DataFrame) -> plt.Figure:
     """
-    Plot total sleep duration by day.
-    Handles sleep episodes that span multiple days.
+    Scatter + linear regression of evening settle time over time.
+    Forecasts (and annotates) the date when settle time reaches zero.
     """
-    # Ensure datetime conversion
+    df = df.copy()
+    df = df[df["time_to_settle"] > 0].dropna(
+        subset=["time_to_settle", "sleep_start_time"]
+    )
+    df["date"] = pd.to_datetime(df["sleep_start_time"]).dt.normalize()
+    daily = df.groupby("date")["time_to_settle"].mean().reset_index().sort_values("date")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    if len(daily) < 2:
+        ax.text(
+            0.5, 0.5, "Not enough data yet!",
+            ha="center", va="center", transform=ax.transAxes, fontsize=14,
+        )
+        ax.set_title("Evening Settle Time Over Time", fontsize=18)
+        return fig
+
+    x_origin = daily["date"].min()
+    x_num = np.array([(d - x_origin).days for d in daily["date"]])
+    y = daily["time_to_settle"].values
+
+    slope, intercept = np.polyfit(x_num, y, 1)
+
+    # Scatter actual data
+    ax.scatter(
+        daily["date"], y,
+        color=COLOURS.PINK_HEX, edgecolors=COLOURS.BROWN_HEX, zorder=3, s=70,
+        label="Actual",
+    )
+
+    # Determine end of regression line
+    zero_date = None
+    if slope < 0:
+        days_to_zero = -intercept / slope
+        if days_to_zero > x_num[-1]:  # projection is in the future
+            zero_date = x_origin + pd.Timedelta(days=int(days_to_zero))
+
+    x_end = zero_date if zero_date is not None else daily["date"].max() + pd.Timedelta(days=7)
+    fit_dates = pd.date_range(x_origin, x_end, periods=200)
+    fit_x = np.array([(d - x_origin).days for d in fit_dates])
+    fit_y = slope * fit_x + intercept
+
+    mask = fit_y >= 0
+    style = "--" if zero_date is not None else "-"
+    ax.plot(
+        fit_dates[mask], fit_y[mask],
+        color=COLOURS.BROWN_HEX, linestyle=style, linewidth=2,
+        label="Trend" + (" (forecast)" if zero_date is not None else ""),
+    )
+
+    if zero_date is not None:
+        ax.axvline(zero_date, color="green", linestyle=":", linewidth=1.5, alpha=0.8)
+        ax.annotate(
+            f"Settles instantly:\n{zero_date.strftime('%d %b %Y')}",
+            xy=(zero_date, 0),
+            xytext=(
+                zero_date - pd.Timedelta(days=max(3, int(days_to_zero * 0.15))),
+                max(y) * 0.55,
+            ),
+            fontsize=9,
+            color="green",
+            arrowprops=dict(arrowstyle="->", color="green"),
+        )
+
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.xticks(rotation=45, ha="right")
+    plt.ylabel("Avg Time to Settle (Mins)", fontsize=13)
+    plt.title("Evening Settle Time Over Time", fontsize=18)
+    plt.legend()
+    plt.tight_layout()
+    return fig
+
+
+def plot_total_sleep_by_day(df: pd.DataFrame) -> plt.Figure:
+    """Total sleep duration (hours) per calendar day, all sleep types combined."""
+    df = df.copy()
     df["sleep_start_time"] = pd.to_datetime(df["sleep_start_time"])
     df["sleep_end_time"] = pd.to_datetime(df["sleep_end_time"])
 
     daily_sleep = []
-
     for _, row in df.iterrows():
-        start = row["sleep_start_time"]
-        end = row["sleep_end_time"]
+        start, end = row["sleep_start_time"], row["sleep_end_time"]
         if pd.isnull(start) or pd.isnull(end):
             continue
-
-        # Iterate through each day spanned by the interval
         current = start
         while current.date() <= end.date():
-            # End of this day (or actual end if earlier)
-            day_end = min(end, pd.Timestamp.combine(current.date(), pd.Timestamp.max.time()))
+            day_end = min(
+                end,
+                pd.Timestamp.combine(current.date(), pd.Timestamp.max.time()),
+            )
             hours = (day_end - current).total_seconds() / 3600
             daily_sleep.append({"date": current.date(), "hours": hours})
+            current = pd.Timestamp.combine(
+                current.date() + pd.Timedelta(days=1), pd.Timestamp.min.time()
+            )
 
-            # Move to start of next day
-            current = pd.Timestamp.combine(current.date() + pd.Timedelta(days=1), pd.Timestamp.min.time())
+    if not daily_sleep:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.text(0.5, 0.5, "No completed sleeps yet!", ha="center", va="center", transform=ax.transAxes, fontsize=14)
+        ax.set_title("Total Sleep by Day", fontsize=18)
+        return fig
 
-    # Aggregate
-    if daily_sleep:
-        sleep_by_day = pd.DataFrame(daily_sleep).groupby("date")["hours"].sum()
-    else:
-        sleep_by_day = pd.Series(dtype=float)
+    sleep_by_day = pd.DataFrame(daily_sleep).groupby("date")["hours"].sum()
+    rng = sleep_by_day.max() - sleep_by_day.min()
+    scaled = (sleep_by_day - sleep_by_day.min()) / rng if rng > 0 else sleep_by_day * 0 + 0.5
+    colors = [tuple(x * c + (1 - x) for c in COLOURS.PINK_RGB) for x in scaled]
 
-    # Plot
     fig, ax = plt.subplots(figsize=(8, 5))
-    scaled_sleep = (sleep_by_day - sleep_by_day.min())/(sleep_by_day.max() - sleep_by_day.min())
-    colors = [tuple(x*c + (1-x) for c in COLOURS.PINK_RGB) for x in scaled_sleep]
-
-    sleep_by_day.plot(kind="bar", ax=ax, color=colors, ec='k')
-    plt.ylabel("Total Sleep (hours)", fontsize=14)
+    sleep_by_day.plot(kind="bar", ax=ax, color=colors, ec="k")
+    plt.ylabel("Total Sleep (hours)", fontsize=13)
     plt.title("Total Sleep by Day", fontsize=18)
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     return fig
 
 
-def plot_settle_time_by_technique(
-    df: pd.DataFrame,
-    fill_color: str = COLOURS.PINK_HEX,   # default fill
-    line_color: str = COLOURS.BROWN_HEX     # default line colour
-):
-    """
-    Boxplots of time_to_settle for each settling technique when used,
-    with customisable fill and line colours.
-    """
+def plot_nap_duration_by_day(df: pd.DataFrame) -> plt.Figure:
+    """Bar chart of total daytime nap hours per day, with nap count on secondary axis."""
     df = df.copy()
-    df = df.dropna(subset=["time_to_settle", "settling_techniques"])
+    df = df.dropna(subset=["sleep_start_time", "sleep_end_time"])
+    df["date"] = pd.to_datetime(df["sleep_start_time"]).dt.date
+    df["hours"] = (
+        pd.to_datetime(df["sleep_end_time"]) - pd.to_datetime(df["sleep_start_time"])
+    ).dt.total_seconds() / 3600
 
-    # Explode repeated techniques
-    df = df.explode("settling_techniques")
+    by_day = (
+        df.groupby("date")
+        .agg(total_hours=("hours", "sum"), nap_count=("hours", "count"))
+        .reset_index()
+        .sort_values("date")
+    )
+    by_day["date"] = pd.to_datetime(by_day["date"])
 
-    techniques = df["settling_techniques"].unique()
-    data = [df.loc[df["settling_techniques"] == tech, "time_to_settle"] for tech in techniques]
+    rng = by_day["total_hours"].max() - by_day["total_hours"].min()
+    scaled = (by_day["total_hours"] - by_day["total_hours"].min()) / rng if rng > 0 else by_day["total_hours"] * 0 + 0.5
+    colors = [tuple(x * c + (1 - x) for c in COLOURS.PINK_RGB) for x in scaled]
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    boxprops = dict(facecolor=fill_color, color=line_color, linewidth=1.5)
-    medianprops = dict(color=line_color, linewidth=2)
-    whiskerprops = dict(color=line_color, linewidth=1.5)
-    capprops = dict(color=line_color, linewidth=1.5)
-
-    bp = ax.boxplot(
-        data,
-        labels=techniques,
-        patch_artist=True,   # allows fill colour
-        boxprops=boxprops,
-        medianprops=medianprops,
-        whiskerprops=whiskerprops,
-        capprops=capprops
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+    x = range(len(by_day))
+    ax1.bar(x, by_day["total_hours"], color=colors, edgecolor="k", label="Total nap hours")
+    ax1.set_ylabel("Total Nap Hours", fontsize=13)
+    ax1.set_xticks(list(x))
+    ax1.set_xticklabels(
+        [d.strftime("%d %b") for d in by_day["date"]], rotation=45, ha="right"
     )
 
-    plt.ylabel("Time to Settle (Mins)", fontsize=14)
-    plt.title("Time to Settle by Technique", fontsize=18)
-    plt.xticks(rotation=45, ha="right")
+    ax2 = ax1.twinx()
+    ax2.plot(
+        list(x), by_day["nap_count"],
+        color=COLOURS.BROWN_HEX, marker="o", linewidth=2, label="Nap count",
+    )
+    ax2.set_ylabel("Number of Naps", fontsize=12, color=COLOURS.BROWN_HEX)
+    ax2.tick_params(axis="y", labelcolor=COLOURS.BROWN_HEX)
+    ax2.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
+
+    plt.title("Daytime Naps by Day", fontsize=18)
     plt.tight_layout()
     return fig
+
+
+def plot_evening_wakeups(df: pd.DataFrame) -> plt.Figure:
+    """Bar chart of evening / temporary wake-up count per night."""
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["sleep_start_time"]).dt.date
+    df["wakeup_count"] = df["temporary_wake_up_times"].apply(
+        lambda x: len(x) if x else 0
+    )
+
+    by_day = (
+        df.groupby("date")["wakeup_count"].sum().reset_index().sort_values("date")
+    )
+    by_day["date"] = pd.to_datetime(by_day["date"])
+
+    rng = by_day["wakeup_count"].max() - by_day["wakeup_count"].min()
+    scaled = (by_day["wakeup_count"] - by_day["wakeup_count"].min()) / rng if rng > 0 else by_day["wakeup_count"] * 0 + 0.5
+    colors = [tuple(x * c + (1 - x) for c in COLOURS.PINK_RGB) for x in scaled]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(range(len(by_day)), by_day["wakeup_count"], color=colors, edgecolor="k")
+    ax.set_xticks(range(len(by_day)))
+    ax.set_xticklabels(
+        [d.strftime("%d %b") for d in by_day["date"]], rotation=45, ha="right"
+    )
+    ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    plt.ylabel("Evening Wake Ups", fontsize=13)
+    plt.title("Evening Wake Ups per Night", fontsize=18)
+    plt.tight_layout()
+    return fig
+
+
 def plot_sleep_proportion_by_hour(df: pd.DataFrame) -> plt.Figure:
-    """
-    Calculate the exact proportion of time asleep in each hour of the day (0–23),
-    averaged across all days in the dataset.
-    """
+    """Proportion of time asleep in each hour of the day, averaged across all days."""
     df = df.copy()
     df["sleep_start_time"] = pd.to_datetime(df["sleep_start_time"])
     df["sleep_end_time"] = pd.to_datetime(df["sleep_end_time"])
     df = df.dropna(subset=["sleep_start_time", "sleep_end_time"])
 
-    # Track total asleep minutes per hour
     asleep_minutes = np.zeros(24)
-
     for _, row in df.iterrows():
         start, end = row["sleep_start_time"], row["sleep_end_time"]
-
-        # Ensure sleep end is after start (handle overnight if needed)
         if end <= start:
             end += pd.Timedelta(days=1)
-
-        # Iterate hour blocks overlapping this sleep period
         current = start.floor("h")
         while current < end:
             next_hour = current + pd.Timedelta(hours=1)
-            overlap_start = max(start, current)
-            overlap_end = min(end, next_hour)
-            minutes_asleep = (overlap_end - overlap_start).total_seconds() / 60.0
-            if minutes_asleep > 0:
-                asleep_minutes[current.hour] += minutes_asleep
+            overlap = (min(end, next_hour) - max(start, current)).total_seconds() / 60.0
+            if overlap > 0:
+                asleep_minutes[current.hour] += overlap
             current = next_hour
 
-    # Number of unique days in dataset (to normalise to "proportion of each day")
     num_days = df["sleep_start_time"].dt.normalize().nunique()
-    total_minutes_per_hour = num_days * 60.0
+    proportions = asleep_minutes / max(num_days * 60.0, 1)
+    colors = [tuple(x * c + (1 - x) for c in COLOURS.PINK_RGB) for x in proportions]
 
-    proportions = asleep_minutes / total_minutes_per_hour
-
-    # Colour scale (pink intensity by proportion)
-    colors = [tuple(x*c + (1-x) for c in COLOURS.PINK_RGB) for x in proportions]
-
-    # Plot
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.bar(range(24),100*proportions, color=colors, edgecolor="k")
+    ax.bar(range(24), 100 * proportions, color=colors, edgecolor="k")
     plt.xticks(range(24))
-    plt.xlabel("Hour of Day", fontsize=14)
-    plt.ylabel("Percentage of Time Asleep", fontsize=14)
-    plt.title("Proportion of Time Asleep by Hour of Day", fontsize=18)
+    plt.xlabel("Hour of Day", fontsize=13)
+    plt.ylabel("% of Time Asleep", fontsize=13)
+    plt.title("Proportion of Time Asleep by Hour", fontsize=18)
     plt.tight_layout()
     return fig
 
+
 def display_sleeping_data(df: pd.DataFrame):
-    """
-    Display the full sleeping data
-    """
-    # Tidy columns
-    df = df[
-        [
-            "sleep_start_time",
-            "sleep_end_time",
-            "time_to_settle",
-            "sleep_location",
-            "temporary_wake_up_times",
-            "settling_techniques",
-        ]
-    ].reset_index(drop=True)
+    """Display the full sleeping data table"""
+    cols = [
+        "sleep_start_time",
+        "sleep_end_time",
+        "sleep_type",
+        "time_to_settle",
+        "sleep_location",
+        "temporary_wake_up_times",
+        "settling_techniques",
+    ]
+    df = df[[c for c in cols if c in df.columns]].reset_index(drop=True)
     df["temporary_wake_up_times"] = df["temporary_wake_up_times"].apply(
-        lambda lst: [pd.to_datetime(x).strftime("%Y-%m-%d %H:%M:%S") for x in lst]
+        lambda lst: [pd.to_datetime(x).strftime("%Y-%m-%d %H:%M") for x in (lst or [])]
     )
     df.index += 1
     df.columns = [
