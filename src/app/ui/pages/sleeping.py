@@ -445,7 +445,7 @@ def plot_evening_wakeups(df: pd.DataFrame) -> plt.Figure:
     df = df.copy()
     df["date"] = pd.to_datetime(df["sleep_start_time"]).dt.date
     df["wakeup_count"] = df["temporary_wake_up_times"].apply(
-        lambda x: len(x) if x else 0
+        lambda x: len(x) if isinstance(x, (list, np.ndarray)) else 0
     )
 
     by_day = (
